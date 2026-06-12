@@ -1,0 +1,829 @@
+{% extends 'base.html' %}
+
+{% block title %}Attendance Analytics - Attendance System{% endblock %}
+
+{% block content %}
+<h3 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Attendance Analytics</h3>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form id="analytics-filter-form" method="get" class="row g-3" role="search" aria-label="Analytics filters">
+      <div class="col-lg-3 col-12">{{ form.class_instance.label_tag }} {{ form.class_instance }}</div>
+      <div class="col-lg-3 col-12">{{ form.student.label_tag }} {{ form.student }}</div>
+      <div class="col-6 col-lg-2">{{ form.start_date.label_tag }} {{ form.start_date }}</div>
+      <div class="col-6 col-lg-2">{{ form.end_date.label_tag }} {{ form.end_date }}</div>
+      <div class="col-lg-2 col-12 d-flex align-items-end justify-content-end">
+        <button id="analytics-filter-btn" class="btn btn-primary" type="submit">
+          <span id="analytics-filter-spinner" class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true"></span>
+          <i class="fas fa-filter me-1"></i>Apply Filters
+        </button>
+      </div>
+      <div class="col-12">
+        <small id="date-error" class="text-danger d-none" role="alert">Start date must be on or before End date.</small>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Daily Overview: primary view -->
+<div class="card mb-3" aria-describedby="daily-overview-help">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <strong>Daily Overview</strong>
+    <div class="d-flex align-items-center gap-2">
+      <label for="daily-date" class="form-label mb-0">Date</label>
+      <input type="date" id="daily-date" class="form-control form-control-sm" style="width: 180px;" />
+      <button id="daily-refresh" class="btn btn-sm btn-primary" type="button"><i class="fas fa-sync me-1"></i>Refresh</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div id="daily-overview-help" class="visually-hidden">Daily Present vs Absent pie chart with counts and percentages, and accessible lists below.</div>
+    <div class="row g-3 align-items-start">
+      <div class="col-lg-4 col-12">
+        <canvas id="dailyPie" aria-label="Daily Present vs Absent pie" role="img"></canvas>
+        <div id="daily-empty" class="mt-2 small text-muted d-none">No enrolled students or no data for the selected day.</div>
+        <div class="mt-2 small text-muted">Click a pie segment to focus the corresponding list. Legend labels include counts and percentages.</div>
+      </div>
+      <div class="col-lg-8 col-12">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="h6 mb-0">Present <span class="badge bg-success" id="daily-present-count">0</span></div>
+          <div class="btn-group btn-group-sm" role="group">
+            <button class="btn btn-outline-secondary" id="daily-export-csv" type="button"><i class="fas fa-file-csv me-1"></i>Export CSV</button>
+            <button class="btn btn-outline-secondary" id="daily-copy" type="button"><i class="fas fa-copy me-1"></i>Copy</button>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="list-group small" id="present-list" style="max-height: 360px; overflow:auto;" aria-label="Present students list"></div>
+          </div>
+          <div class="col-md-6">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="h6 mb-0">Absent <span class="badge bg-danger" id="daily-absent-count">0</span></div>
+            </div>
+            <div class="list-group small" id="absent-list" style="max-height: 360px; overflow:auto;" aria-label="Absent students list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if has_selected_class %}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Trend (Daily Present)</strong>
+  </div>
+  <div class="card-body">
+    <canvas id="attendanceTrend"></canvas>
+  </div>
+  </div>
+{% endif %}
+
+<div class="row mb-3">
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Total Students</h6>
+        <div class="h4 mb-0" id="card-enrolled">{{ enrolled_students }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Present</h6>
+        <div class="h4 mb-0 text-success" id="card-present">{{ present_count }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Absent</h6>
+        <div class="h4 mb-0 text-danger" id="card-absent">{{ absent_count }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body">
+        <h6 class="text-muted">Attendance %</h6>
+        <div class="h4 mb-0" id="card-percentage">{{ cards_percentage }}%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+ 
+
+<!-- Per-Student Information (inline) -->
+<div class="card mb-3" aria-describedby="student-inline-help">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Per-Student Information</strong>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Student history period">
+      <button class="btn btn-outline-primary" data-sp-days="7">7d</button>
+      <button class="btn btn-outline-primary" data-sp-days="15">15d</button>
+      <button class="btn btn-outline-primary active" data-sp-days="30">30d</button>
+      <button class="btn btn-outline-primary" data-sp-days="60">60d</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div id="student-inline-help" class="visually-hidden">Shows selected student's attendance summary and a compact timeline.</div>
+    <div id="sp-inline-empty" class="text-muted">Select a student (from the filters or the lists) to view details.</div>
+    <div id="sp-inline" class="d-none">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+          <div class="fw-semibold" id="sp-inline-name">-</div>
+          <div class="text-muted small" id="sp-inline-roll">-</div>
+        </div>
+        <div class="text-end small">
+          <span class="me-3"><span class="text-success" id="sp-inline-pres">0</span> Present</span>
+          <span class="me-3"><span class="text-danger" id="sp-inline-abs">0</span> Absent</span>
+          <span><span id="sp-inline-total">0</span> Days</span>
+        </div>
+      </div>
+      <canvas id="sp-inline-chart" height="110" aria-label="Student mini timeline" role="img"></canvas>
+    </div>
+  </div>
+ </div>
+
+{% if date_range %}
+<div class="alert alert-light py-2 mb-3 border">
+  <small class="text-muted">Date range:
+    <strong>{{ date_range.start|date:'Y-m-d' }}</strong>
+    to
+    <strong>{{ date_range.end|date:'Y-m-d' }}</strong>
+  </small>
+  {% if student_breakdown %}
+  <small class="text-muted ms-3">Per-student breakdown shown for selected class.</small>
+  {% endif %}
+  <small class="text-muted d-block">Note: Unmarked students are counted as absent for each day in range.</small>
+  </div>
+{% endif %}
+
+
+{% if student_breakdown %}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Per-Student Breakdown (Selected Class)</strong>
+    <button id="export-student-csv" class="btn btn-sm btn-outline-secondary" type="button">
+      <i class="fas fa-file-csv me-1"></i>Export CSV
+    </button>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Present Days</th>
+            <th>Absent Days</th>
+            <th>Total Days</th>
+            <th>%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in student_breakdown %}
+          <tr>
+            <td>{{ row.student.get_full_name|default:row.student.username }}</td>
+            <td class="text-success">{{ row.present_days }}</td>
+            <td class="text-danger">{{ row.absent_days }}</td>
+            <td>{{ row.total_days }}</td>
+            <td>{{ row.percentage }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  </div>
+{% endif %}
+
+<!-- Drilldown Modal -->
+<div class="modal fade" id="drilldownModal" tabindex="-1" aria-labelledby="drilldownLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="drilldownLabel">Attendance Records</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div id="drilldown-meta" class="small text-muted"></div>
+          <div class="input-group input-group-sm" style="max-width:260px;">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" id="drilldown-search" class="form-control" placeholder="Search student..." aria-label="Search student" />
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle" id="drilldown-table" aria-label="Drilldown attendance table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Student</th>
+                <th>Class</th>
+                <th>Present</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="btn-group me-auto">
+          <button class="btn btn-outline-secondary btn-sm" id="drill-prev">Prev</button>
+          <button class="btn btn-outline-secondary btn-sm" id="drill-next">Next</button>
+        </div>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+{% if analytics_data %}
+{{ analytics_data|json_script:"analytics-data" }}
+{% endif %}
+{% if trend_data %}
+{{ trend_data|json_script:"trend-data" }}
+{% endif %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script>
+// Helpers for filters and URLs
+(function(){
+  const form = document.getElementById('analytics-filter-form');
+  const btn = document.getElementById('analytics-filter-btn');
+  const spinner = document.getElementById('analytics-filter-spinner');
+  const apiBase = '{% url "adminview:attendance_analytics_api" %}';
+  const drillApi = '{% url "adminview:attendance_analytics_drilldown" %}';
+  const dailyApi = '{% url "adminview:attendance_daily_summary" %}';
+  const studentHistoryApi = '{% url "adminview:attendance_student_history" %}';
+  const startInput = document.querySelector('input[name="start_date"]');
+  const endInput = document.querySelector('input[name="end_date"]');
+  const dateError = document.getElementById('date-error');
+  const modeRadios = document.querySelectorAll('input[name="metric_mode"]');
+
+  function setLoading(on){
+    if (btn) btn.disabled = on;
+    if (spinner) spinner.classList.toggle('d-none', !on);
+  }
+
+  // ------- Daily Overview (primary view) -------
+  async function fetchDaily(){
+    const classSel = document.querySelector('select[name="class_instance"]');
+    const cls = classSel && classSel.value ? classSel.value : '';
+    const dateInput = document.getElementById('daily-date');
+    const day = dateInput && dateInput.value ? dateInput.value : (new Date()).toISOString().slice(0,10);
+    if (!cls) {
+      // Clear UI when no class
+      renderDaily({present:[], absent:[], counts:{present:0, absent:0, total:0}});
+      return;
+    }
+    try{
+      const url = new URL(dailyApi, window.location.origin);
+      url.searchParams.set('class_id', cls);
+      url.searchParams.set('date', day);
+      const res = await fetch(url.toString(), { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error||'Daily fetch failed');
+      renderDaily(data);
+    }catch(e){ renderDaily({present:[], absent:[], counts:{present:0, absent:0, total:0}}); }
+  }
+
+  function renderDaily(data){
+    // lists
+    const presentEl = document.getElementById('present-list');
+    const absentEl = document.getElementById('absent-list');
+    const pc = document.getElementById('daily-present-count');
+    const ac = document.getElementById('daily-absent-count');
+    const present = Array.isArray(data.present)?data.present:[];
+    const absent = Array.isArray(data.absent)?data.absent:[];
+    if (pc) pc.textContent = String(present.length);
+    if (ac) ac.textContent = String(absent.length);
+    function rowHtml(s){
+      const avatar = s.name?.charAt(0)?.toUpperCase() || '?';
+      const time = s.check_in_time ? `<span class="badge bg-light text-dark ms-2"><i class=\"far fa-clock me-1\"></i>${s.check_in_time}</span>` : '';
+      return `<button type="button" class="list-group-item list-group-item-action d-flex align-items-center" data-student-id="${s.id}">
+        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width:28px;height:28px;">${avatar}</div>
+        <div class="flex-grow-1">
+          <div class="fw-semibold">${s.name}</div>
+          <div class="text-muted small">ID: ${s.roll||''}</div>
+        </div>
+        ${time}
+      </button>`;
+    }
+    if (presentEl) presentEl.innerHTML = present.map(rowHtml).join('') || '<div class="text-muted">No present students</div>';
+    if (absentEl) absentEl.innerHTML = absent.map(rowHtml).join('') || '<div class="text-muted">No absent students</div>';
+
+    // chart
+    const el = document.getElementById('dailyPie');
+    const emptyEl = document.getElementById('daily-empty');
+    const total = (data.counts?.total)|| (present.length+absent.length);
+    const p = present.length;
+    const a = absent.length;
+    if (el){
+      try{ if (chartDaily) { chartDaily.destroy(); } }catch(_){}
+      const labels = ['Present','Absent'];
+      const colors = ['#28a745','#dc3545'];
+      // Toggle empty message visibility
+      if (emptyEl) emptyEl.classList.toggle('d-none', !!total);
+      // Build plugins array (datalabels optional)
+      const plugins = [];
+      if (window.ChartDataLabels) { plugins.push(ChartDataLabels); }
+      chartDaily = new Chart(el.getContext('2d'), {
+        type: 'pie',
+        data: { labels, datasets: [{ data: [p, a], backgroundColor: colors }]},
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom', labels: { generateLabels(chart){
+              const ds = chart.data.datasets[0];
+              return chart.data.labels.map((l,i)=>{
+                const val = ds.data[i]||0; const pct = total? Math.round(val*100/total):0;
+                return { text: `${l} — ${val} (${pct}%)`, fillStyle: ds.backgroundColor[i], index: i };
+              });
+            }}},
+            tooltip: { callbacks: { label: (ctx)=>{
+              const val = ctx.parsed||0; const pct = total? Math.round(val*100/total):0; return `${ctx.label} — ${val} (${pct}%)`;
+            } } },
+            // Only configure datalabels if plugin is present
+            ...(window.ChartDataLabels ? { datalabels: { color: '#fff', font: { weight: 'bold' }, formatter: (val)=>{ const pct = total? Math.round(val*100/total):0; return `${val}\n${pct}%`; } } } : {})
+          }
+        },
+        plugins: plugins
+      });
+      // click to focus list
+      el.onclick = (evt)=>{
+        const points = chartDaily.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+        if (!points || !points.length) return;
+        const idx = points[0].index;
+        const target = idx===0 ? document.getElementById('present-list') : document.getElementById('absent-list');
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    }
+
+    // click row -> open student panel
+    document.querySelectorAll('#present-list .list-group-item, #absent-list .list-group-item').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const sid = el.getAttribute('data-student-id');
+        openStudentPanel(sid);
+        loadStudentInline(sid, getInlineDays());
+      });
+    });
+  }
+
+  // Export helpers for daily lists
+  function exportDailyCsv(){
+    const rows = [];
+    const day = document.getElementById('daily-date')?.value || '';
+    function extract(listId, status){
+      document.querySelectorAll(`#${listId} .list-group-item`).forEach(el=>{
+        const name = el.querySelector('.fw-semibold')?.textContent?.trim()||'';
+        const idText = el.querySelector('.text-muted.small')?.textContent?.replace('ID:','').trim()||'';
+        const time = el.querySelector('.badge.bg-light')?.textContent?.trim()||'';
+        rows.push([day, status, name, idText, time]);
+      });
+    }
+    extract('present-list','Present');
+    extract('absent-list','Absent');
+    const csv = ['Date,Status,Name,Roll/ID,Check-in Time'].concat(rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(','))).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'attendance_daily.csv'; a.click();
+  }
+  function copyDaily(){
+    const lines = [];
+    function collect(listId, status){
+      document.querySelectorAll(`#${listId} .list-group-item`).forEach(el=>{
+        const name = el.querySelector('.fw-semibold')?.textContent?.trim()||'';
+        const idText = el.querySelector('.text-muted.small')?.textContent?.replace('ID:','').trim()||'';
+        const time = el.querySelector('.badge.bg-light')?.textContent?.trim()||'';
+        lines.push(`${status}\t${name}\t${idText}\t${time}`);
+      });
+    }
+    collect('present-list','Present');
+    collect('absent-list','Absent');
+    navigator.clipboard?.writeText(lines.join('\n'));
+  }
+
+  document.getElementById('daily-export-csv')?.addEventListener('click', exportDailyCsv);
+  document.getElementById('daily-copy')?.addEventListener('click', copyDaily);
+  document.getElementById('daily-refresh')?.addEventListener('click', fetchDaily);
+  // initialize daily date = today
+  (function(){ const d = new Date(); const s = d.toISOString().slice(0,10); const el = document.getElementById('daily-date'); if (el && !el.value) el.value = s; })();
+  // change of class/date triggers daily
+  document.querySelector('select[name="class_instance"]')?.addEventListener('change', fetchDaily);
+  document.getElementById('daily-date')?.addEventListener('change', fetchDaily);
+
+  // ---------- Inline Per-Student Information ----------
+  let spInlineChart = null;
+  function getInlineDays(){
+    const active = document.querySelector('[data-sp-days].active');
+    const d = active ? parseInt(active.getAttribute('data-sp-days'),10) : 30;
+    return (d===7||d===15||d===30||d===60) ? d : 30;
+  }
+  async function loadStudentInline(studentId, days){
+    const empty = document.getElementById('sp-inline-empty');
+    const wrap = document.getElementById('sp-inline');
+    if (!studentId){ if (wrap) wrap.classList.add('d-none'); if (empty) empty.classList.remove('d-none'); return; }
+    try{
+      const classSel = document.querySelector('select[name="class_instance"]');
+      const cls = classSel && classSel.value ? classSel.value : '';
+      const url = new URL(studentHistoryApi, window.location.origin);
+      url.searchParams.set('student_id', studentId);
+      if (cls) url.searchParams.set('class_id', cls);
+      url.searchParams.set('days', String(days||30));
+      const res = await fetch(url.toString(), { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error||'Failed');
+      // populate
+      document.getElementById('sp-inline-name').textContent = data.student?.name || '-';
+      document.getElementById('sp-inline-roll').textContent = data.student?.roll || '-';
+      document.getElementById('sp-inline-pres').textContent = data.counts?.present || 0;
+      document.getElementById('sp-inline-abs').textContent = data.counts?.absent || 0;
+      document.getElementById('sp-inline-total').textContent = data.counts?.total_days || 0;
+      if (empty) empty.classList.add('d-none');
+      if (wrap) wrap.classList.remove('d-none');
+      const el = document.getElementById('sp-inline-chart');
+      if (spInlineChart) { try{ spInlineChart.destroy(); }catch(_){} }
+      spInlineChart = new Chart(el.getContext('2d'), {
+        type: 'bar',
+        data: { labels: (data.series||[]).map(x=>x.date), datasets: [{ label: 'Present', data: (data.series||[]).map(x=>x.present), backgroundColor: (ctx)=> (ctx.raw? '#28a745':'#dc3545') }]},
+        options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx)=> (ctx.raw? 'Present':'Absent') } } }, scales: { y: { display: false, suggestedMin: 0, suggestedMax: 1 } } }
+      });
+    }catch(e){ /* noop */ }
+  }
+  // Hook student select
+  (function(){
+    const sel = document.querySelector('select[name="student"]');
+    if (!sel) return;
+    sel.addEventListener('change', ()=>{
+      const sid = sel.value || '';
+      if (sid) { loadStudentInline(sid, getInlineDays()); }
+      else {
+        const empty = document.getElementById('sp-inline-empty');
+        const wrap = document.getElementById('sp-inline');
+        if (wrap) wrap.classList.add('d-none'); if (empty) empty.classList.remove('d-none');
+      }
+    });
+  })();
+  // Hook inline period buttons
+  (function(){
+    document.querySelectorAll('[data-sp-days]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        btn.parentElement?.querySelectorAll('[data-sp-days]').forEach(b=> b.classList.toggle('active', b===btn));
+        const sid = document.querySelector('select[name="student"]')?.value;
+        if (sid) loadStudentInline(sid, getInlineDays());
+      });
+    });
+  })();
+
+  function validateDates(){
+    const s = startInput?.value;
+    const e = endInput?.value;
+    let ok = true;
+    if (s && e && s > e){
+      ok = false;
+    }
+    // UI feedback
+    [startInput, endInput].forEach(el=>{
+      if (!el) return;
+      el.classList.toggle('is-invalid', !ok);
+      el.setAttribute('aria-invalid', String(!ok));
+    });
+    if (dateError) dateError.classList.toggle('d-none', ok);
+    // disable submit if invalid
+    if (btn) btn.disabled = !ok;
+    return ok;
+  }
+
+  function getFilters(){
+    const fd = new FormData(form);
+    const qs = new URLSearchParams();
+    const cls = fd.get('class_instance');
+    const stu = fd.get('student');
+    const sd = fd.get('start_date');
+    const ed = fd.get('end_date');
+    const gran = fd.get('granularity') || 'daily';
+    if (cls) qs.set('class_id', cls);
+    if (stu) qs.set('student_id', stu);
+    if (sd) qs.set('start_date', sd);
+    if (ed) qs.set('end_date', ed);
+    if (gran) qs.set('granularity', gran);
+    return qs;
+  }
+
+  function buildApiUrl(params){
+    return apiBase + (params.toString() ? ('?' + params.toString()) : '');
+  }
+
+  // Charts state
+  let chartPie = window._chartPie;
+  let chartBar = window._chartBar;
+  let chartTrend = window._chartTrend;
+  let chartDaily = window._chartDaily;
+  let chartSummaryPie = window._chartSummaryPie;
+  let chartSummaryDoughnut = window._chartSummaryDoughnut;
+
+  function destroyCharts(){
+    try{ if (chartPie) { chartPie.destroy(); chartPie = null; } } catch(e){}
+    try{ if (chartBar) { chartBar.destroy(); chartBar = null; } } catch(e){}
+    try{ if (chartTrend) { chartTrend.destroy(); chartTrend = null; } } catch(e){}
+    try{ if (chartDaily) { chartDaily.destroy(); chartDaily = null; } } catch(e){}
+    try{ if (chartSummaryPie) { chartSummaryPie.destroy(); chartSummaryPie = null; } } catch(e){}
+    try{ if (chartSummaryDoughnut) { chartSummaryDoughnut.destroy(); chartSummaryDoughnut = null; } } catch(e){}
+  }
+
+  function getMode(){
+    let sel = 'headcount';
+    modeRadios.forEach(r=>{ if (r.checked) sel = r.value; });
+    return sel;
+  }
+
+  function pickTotals(payload){
+    return getMode() === 'headcount' ? (payload.totals_headcount || payload.totals || {}) : (payload.totals_marks || payload.totals || {});
+  }
+
+  function updateCardsFromPayload(payload){
+    const totals = pickTotals(payload);
+    document.getElementById('card-enrolled').textContent = totals.enrolled ?? 0;
+    document.getElementById('card-present').textContent = totals.present ?? 0;
+    document.getElementById('card-absent').textContent = totals.absent ?? 0;
+    document.getElementById('card-percentage').textContent = (totals.percentage ?? 0) + '%';
+  }
+
+  function renderCharts(payload){
+    const pieEl = document.getElementById('attendancePie');
+    const barEl = document.getElementById('attendanceBar');
+    const trendEl = document.getElementById('attendanceTrend');
+    const summaryPieEl = document.getElementById('summaryPie');
+    const summaryDoughnutEl = document.getElementById('summaryDoughnut');
+    const totals = pickTotals(payload);
+    const present = totals?.present ?? 0;
+    const absent = totals?.absent ?? 0;
+    const labels = ['Present','Absent'];
+    const colors = ['#28a745','#dc3545'];
+    destroyCharts();
+    if (pieEl){
+      chartPie = new Chart(pieEl.getContext('2d'), {
+        type: 'pie',
+        data: { labels, datasets: [{ data: [present, absent], backgroundColor: colors }]},
+        options: { responsive: true, plugins: { legend: { position: 'bottom' }}}
+      });
+      // drilldown from pie
+      pieEl.onclick = (evt)=>{
+        const points = chartPie.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+        if (points && points.length){ openDrilldown(); }
+      };
+    }
+    if (barEl){
+      chartBar = new Chart(barEl.getContext('2d'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Count', data: [present, absent], backgroundColor: colors }]},
+        options: { responsive: true, plugins: { legend: { display: false }}, scales: { y: { beginAtZero: true }}}
+      });
+      barEl.onclick = ()=> openDrilldown();
+    }
+    if (trendEl){
+      const t = Array.isArray(payload.trend) ? payload.trend : [];
+      chartTrend = new Chart(trendEl.getContext('2d'), {
+        type: 'line',
+        data: { labels: t.map(x=>x.date), datasets: [{ label: 'Present', data: t.map(x=>x.present), borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.15)', fill: true, tension: .35 }]},
+        options: { responsive: true, plugins: { legend: { position: 'bottom' }}, scales: { y: { beginAtZero: true }}}
+      });
+    }
+
+    // New summary Pie and Doughnut
+    const total = (present + absent) || 0;
+    const plugins = [];
+    if (window.ChartDataLabels) plugins.push(ChartDataLabels);
+    if (summaryPieEl){
+      chartSummaryPie = new Chart(summaryPieEl.getContext('2d'), {
+        type: 'pie',
+        data: { labels, datasets: [{ data: [present, absent], backgroundColor: colors }]},
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: { callbacks: { label: (ctx)=>{ const val=ctx.parsed||0; const pct= total? Math.round(val*100/total):0; return `${ctx.label} — ${val} (${pct}%)`; } } },
+            ...(window.ChartDataLabels ? { datalabels: { color:'#fff', font:{weight:'bold'}, formatter:(val)=>{ const pct= total? Math.round(val*100/total):0; return `${val}\n${pct}%`; } } } : {})
+          }
+        },
+        plugins
+      });
+    }
+    if (summaryDoughnutEl){
+      chartSummaryDoughnut = new Chart(summaryDoughnutEl.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: [present, absent], backgroundColor: colors, borderWidth: 2 }]},
+        options: {
+          cutout: '55%',
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: { callbacks: { label: (ctx)=>{ const val=ctx.parsed||0; const pct= total? Math.round(val*100/total):0; return `${ctx.label} — ${val} (${pct}%)`; } } },
+            ...(window.ChartDataLabels ? { datalabels: { color:'#000', font:{weight:'bold'}, formatter:(val)=>{ const pct= total? Math.round(val*100/total):0; return `${pct}%`; } } } : {})
+          }
+        },
+        plugins
+      });
+    }
+  }
+
+  let lastPayload = null;
+
+  let _fetchCtrl = null;
+  let _debounceTimer = null;
+  async function fetchAnalytics(){
+    if (!validateDates()) return;
+    setLoading(true);
+    const params = getFilters();
+    // cancel previous request if in-flight
+    if (_fetchCtrl) { try{ _fetchCtrl.abort(); }catch(_){} }
+    _fetchCtrl = new AbortController();
+    try{
+      const res = await fetch(buildApiUrl(params), { credentials: 'same-origin', signal: _fetchCtrl.signal });
+      const data = await res.json();
+      if (!res.ok){ throw new Error(data?.error || 'Request failed'); }
+      lastPayload = data;
+      updateCardsFromPayload(data);
+      renderCharts(data);
+    } catch(e){
+      if (e.name !== 'AbortError'){
+        alert('Failed to load analytics. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+      _fetchCtrl = null;
+    }
+  }
+
+  function fetchAnalyticsDebounced(){
+    if (_debounceTimer) clearTimeout(_debounceTimer);
+    _debounceTimer = setTimeout(fetchAnalytics, 300);
+  }
+
+  function openDrilldown(){
+    const modalEl = document.getElementById('drilldownModal');
+    if (!modalEl) return;
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+    loadDrilldownPage(1);
+  }
+
+  async function loadDrilldownPage(page){
+    const params = getFilters();
+    params.set('page', String(page || 1));
+    const qInput = document.getElementById('drilldown-search');
+    if (qInput && qInput.value) params.set('q', qInput.value.trim());
+    const url = drillApi + '?' + params.toString();
+    const tbody = document.querySelector('#drilldown-table tbody');
+    const meta = document.getElementById('drilldown-meta');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+    try{
+      const res = await fetch(url, { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!res.ok){ throw new Error(data?.error || 'Drilldown failed'); }
+      const rows = (data.results||[]).map(r=>`<tr><td>${r.timestamp}</td><td>${r.student_name}</td><td>${r.class_name}</td><td>${r.is_present?'<span class="badge bg-success">Yes</span>':'<span class="badge bg-danger">No</span>'}</td></tr>`).join('');
+      if (tbody) tbody.innerHTML = rows || '<tr><td colspan="4">No records</td></tr>';
+      if (meta) meta.textContent = `Page ${data.page} • Total ${data.total}`;
+      const prev = document.getElementById('drill-prev');
+      const next = document.getElementById('drill-next');
+      const totalPages = Math.ceil((data.total||0) / (data.page_size||25));
+      if (prev) prev.disabled = (data.page||1) <= 1;
+      if (next) next.disabled = (data.page||1) >= totalPages;
+      prev.onclick = ()=> loadDrilldownPage((data.page||1)-1);
+      next.onclick = ()=> loadDrilldownPage((data.page||1)+1);
+    } catch(e){ if (tbody) tbody.innerHTML = '<tr><td colspan="4">Failed to load</td></tr>'; }
+  }
+
+  // Submit filters triggers AJAX (no full reload)
+  form.addEventListener('submit', function(ev){
+    ev.preventDefault();
+    if (!validateDates()) { startInput?.focus(); return; }
+    fetchAnalytics();
+  });
+  form.querySelectorAll('select, input[type="date"], input[type="radio"]').forEach(el=>{
+    el.addEventListener('change', ()=>{ if (el.type === 'date') validateDates(); fetchAnalyticsDebounced(); });
+  });
+
+  // Quick ranges
+  document.getElementById('quick-daily')?.addEventListener('click', ()=>{
+    const d = new Date(); const s = d.toISOString().slice(0,10);
+    form.querySelector('input[name="start_date"]').value = s;
+    form.querySelector('input[name="end_date"]').value = s;
+    validateDates();
+    fetchAnalytics();
+  });
+  document.getElementById('quick-weekly')?.addEventListener('click', ()=>{
+    const t = new Date();
+    const monday = new Date(t); const dow = t.getDay(); monday.setDate(t.getDate() - ((dow===0)?6:(dow-1)));
+    const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
+    form.querySelector('input[name="start_date"]').value = monday.toISOString().slice(0,10);
+    form.querySelector('input[name="end_date"]').value = sunday.toISOString().slice(0,10);
+    validateDates();
+    fetchAnalytics();
+  });
+  document.getElementById('quick-monthly')?.addEventListener('click', ()=>{
+    const t = new Date(); const first = new Date(t.getFullYear(), t.getMonth(), 1); const last = new Date(t.getFullYear(), t.getMonth()+1, 0);
+    form.querySelector('input[name="start_date"]').value = first.toISOString().slice(0,10);
+    form.querySelector('input[name="end_date"]').value = last.toISOString().slice(0,10);
+    validateDates();
+    fetchAnalytics();
+  });
+
+  // Export buttons with current filters
+  document.getElementById('export-class-csv')?.addEventListener('click', ()=>{
+    const p = getFilters(); p.set('export','csv');
+    window.location.href = buildApiUrl(p);
+  });
+  document.getElementById('export-student-csv')?.addEventListener('click', ()=>{
+    const p = getFilters(); p.set('export','csv');
+    window.location.href = drillApi + '?' + p.toString();
+  });
+
+  // Click on class row selects and refreshes analytics
+  document.querySelectorAll('.select-class-btn, .select-class-row').forEach(el=>{
+    el.addEventListener('click', (ev)=>{
+      const cid = ev.currentTarget.getAttribute('data-class-id') || ev.currentTarget.dataset.classId;
+      const sel = form.querySelector('select[name="class_instance"]');
+      if (cid && sel){ sel.value = cid; fetchAnalyticsDebounced(); }
+    });
+  });
+
+  // Toggle mode re-renders cards/charts from last payload without refetch
+  modeRadios.forEach(r=>{
+    r.addEventListener('change', ()=>{ if (lastPayload){ updateCardsFromPayload(lastPayload); renderCharts(lastPayload); } });
+  });
+
+  // Initial fetch to sync dynamic charts/cards with server
+  validateDates();
+  fetchAnalytics();
+  fetchDaily();
+})();
+  // Drilldown search debounce
+  (function(){
+    const qInput = document.getElementById('drilldown-search');
+    if (!qInput) return;
+    let t = null;
+    qInput.addEventListener('input', ()=>{
+      if (t) clearTimeout(t);
+      t = setTimeout(()=> loadDrilldownPage(1), 400);
+    });
+  })();
+
+// Quick date range buttons (Daily/Weekly/Monthly)
+(function(){
+  const form = document.getElementById('analytics-filter-form');
+  if (!form) return;
+  const start = form.querySelector('input[name="start_date"]');
+  const end = form.querySelector('input[name="end_date"]');
+  const daily = document.getElementById('quick-daily');
+  const weekly = document.getElementById('quick-weekly');
+  const monthly = document.getElementById('quick-monthly');
+
+  function formatDate(d){
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  function setDaily(){
+    const today = new Date();
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (start) start.value = formatDate(d);
+    if (end) end.value = formatDate(d);
+    form.requestSubmit ? form.requestSubmit() : form.submit();
+  }
+
+  function setWeekly(){
+    const today = new Date();
+    const dow = today.getDay(); // 0=Sun..6=Sat
+    const mondayOffset = (dow === 0 ? -6 : 1 - dow); // Monday as start
+    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + mondayOffset);
+    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+    if (start) start.value = formatDate(monday);
+    if (end) end.value = formatDate(sunday);
+    form.requestSubmit ? form.requestSubmit() : form.submit();
+  }
+
+  function setMonthly(){
+    const today = new Date();
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    if (start) start.value = formatDate(first);
+    if (end) end.value = formatDate(last);
+    form.requestSubmit ? form.requestSubmit() : form.submit();
+  }
+
+  if (daily) daily.addEventListener('click', setDaily);
+  if (weekly) weekly.addEventListener('click', setWeekly);
+  if (monthly) monthly.addEventListener('click', setMonthly);
+})();
+
+// Legacy chart bootstrap removed; now handled by fetchAnalytics()
+
+// Removed legacy metrics updater; covered by fetchAnalytics()
+</script>
+{% endblock %}
