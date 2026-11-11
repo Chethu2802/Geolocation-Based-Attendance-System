@@ -1,49 +1,35 @@
-# Geolocation-Based Attendance Tracking System
+# Geolocation-Based Attendance System
 
-## Project Overview
-A smart attendance management system that uses GPS geofencing and facial recognition to prevent proxy attendance in colleges. Developed as part of academic project at ATME College of Engineering, Mysuru.
+### Project Overview
+A smart attendance system that marks attendance based on user's real-time geolocation. Prevents proxy attendance by validating if user is within defined office/college radius.
 
-This system ensures students can only mark attendance when they are physically present inside the campus and their face is verified.
+### Problem Statement
+Traditional attendance systems allow proxy marking and lack location verification. Organizations need a secure, location-aware solution to ensure employees/students are physically present.
 
-## Problem Statement
-In many colleges, attendance is marked manually or using simple apps which leads to:
-- Proxy attendance by friends
-- Fake attendance from outside campus
-- No proper verification of student identity
-- Time consuming manual reports for staff
-
-Our system solves this by combining location verification + face verification.
-
-## Technologies Used
-- **Backend:** Python, Django 4.2.7, Django REST Framework
-- **Database:** MongoDB (using djongo), MySQL
-- **Face Recognition:** OpenCV, dlib, face-recognition, face-recognition-models
+### Technologies Used
+- **Language:** Python
+- **Libraries:** Geopy, Flask, SQLite
 - **Frontend:** HTML, CSS, JavaScript
-- **GPS:** Browser Geolocation API / GPS APIs
-- **Tools:** Git, GitHub, VS Code
+- **Tools:** Git, VS Code, Geolocation API
 
-## Key Features
-1.  **Geofencing:** Attendance allowed only inside college campus boundaries
-2.  **Facial Recognition:** Verifies student identity using face matching
-3.  **Role-Based Dashboards:**
-    - Student: Mark attendance, view attendance history
-    - Staff: View class attendance, download reports
-    - Admin: Manage students, staff, subjects, geofence settings
-4.  **Automated Reporting:** Daily, monthly attendance reports
-5.  **Real-Time Verification:** Instant validation of location and face
-6.  **Secure Authentication:** Login for all roles
+### Key Features
+- Real-time location tracking and validation
+- Radius-based attendance marking (e.g., 100m from office)
+- Secure login for admin and users
+- Attendance history and reporting dashboard
+- Proxy prevention with geofencing
 
-## Project Structure
+### Installation Instructions
+1. Clone repo: `git clone https://github.com/Chethu2802/Geolocation-Based-Attendance-System.git`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run: `python app.py`
+4. Open browser: `http://localhost:5000`
 
-Geolocation-Attendance-System/
-├── attendance/          # Attendance logic and views
-├── authentication/      # Login and user auth
-├── manage.py
-├── requirements.txt
-├── db.sqlite3 / MongoDB
-└── README.md
+### Screenshots
+Add your project dashboard screenshots here.
 
-
-
-
-    
+### Future Enhancements
+- Face recognition integration
+- Mobile app version
+- Email notification for late attendance
+- Analytics dashboard for HR
